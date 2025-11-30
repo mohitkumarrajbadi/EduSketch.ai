@@ -1,0 +1,7 @@
+{
+  "name": "EduSketch AI Studio",
+  "description": "A powerful educational content creation tool featuring infinite canvas drawing, AI-powered diagram generation, and interactive algorithm visualizations.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
