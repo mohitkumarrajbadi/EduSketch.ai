@@ -13,7 +13,8 @@ import {
   Sparkles, 
   Network, // Connection tool
   Share2,
-  Settings
+  Settings,
+  Plus
 } from 'lucide-react';
 import { ToolType } from '../types';
 
@@ -23,9 +24,10 @@ interface ToolbarProps {
   onAIModalOpen: () => void;
   onSyncOpen: () => void;
   onSettingsOpen: () => void;
+  onShapeLibraryOpen: () => void;
 }
 
-const Toolbar: React.FC<ToolbarProps> = ({ currentTool, setTool, onAIModalOpen, onSyncOpen, onSettingsOpen }) => {
+const Toolbar: React.FC<ToolbarProps> = ({ currentTool, setTool, onAIModalOpen, onSyncOpen, onSettingsOpen, onShapeLibraryOpen }) => {
   const tools = [
     { type: ToolType.SELECT, icon: <MousePointer2 size={20} />, label: 'Select (V)' },
     { type: ToolType.PAN, icon: <Hand size={20} />, label: 'Pan (Space)' },
@@ -82,6 +84,14 @@ const Toolbar: React.FC<ToolbarProps> = ({ currentTool, setTool, onAIModalOpen, 
             {t.icon}
           </button>
         ))}
+        {/* More Shapes Button */}
+        <button
+           onClick={onShapeLibraryOpen}
+           className="p-3 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700 transition-all"
+           title="More System Shapes"
+        >
+          <Plus size={20} />
+        </button>
       </div>
 
       <div className="w-px h-8 bg-slate-700 mx-1 flex-shrink-0" />

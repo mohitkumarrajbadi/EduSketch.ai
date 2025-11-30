@@ -24,9 +24,15 @@ export type Stroke = {
   type: 'pen';
 };
 
+// Expanded list for system design
+export type NodeType = 
+  | 'rect' | 'circle' | 'diamond' | 'cylinder' | 'cloud' | 'actor' 
+  | 'redis' | 'kafka' | 'queue' | 'server' | 'loadbalancer' | 'k8s' | 'docker' | 'storage' | 'firewall' | 'mobile' | 'browser' | 'api'
+  | 'text' | 'visualizer';
+
 export type DiagramNode = {
   id: string;
-  type: 'rect' | 'circle' | 'diamond' | 'cylinder' | 'cloud' | 'actor' | 'text' | 'visualizer';
+  type: NodeType;
   x: number;
   y: number;
   width: number;
@@ -36,12 +42,17 @@ export type DiagramNode = {
   data?: any; // For visualizers
 };
 
+export type EdgeAnimation = 'none' | 'flow' | 'traffic' | 'pulse' | 'signal' | 'reverse';
+export type EdgeStyle = 'solid' | 'dashed' | 'dotted';
+
 export type DiagramEdge = {
   id: string;
   from: string;
   to: string;
-  animated?: boolean;
   label?: string;
+  animation?: EdgeAnimation;
+  style?: EdgeStyle;
+  color?: string;
 };
 
 export type CanvasState = {
@@ -67,6 +78,8 @@ export type AppTheme = {
 export type SyncMessage = 
   | { type: 'SYNC_FULL'; payload: CanvasState }
   | { type: 'ADD_STROKE'; payload: Stroke }
-  | { type: 'DELETE_STROKE'; payload: string } // stroke id
+  | { type: 'DELETE_STROKE'; payload: string }
   | { type: 'UPDATE_NODES'; payload: DiagramNode[] }
   | { type: 'UPDATE_EDGES'; payload: DiagramEdge[] };
+
+export type VisualizerType = 'sorting' | 'bst' | 'graph';

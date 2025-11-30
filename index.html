@@ -35,18 +35,51 @@
       ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
       ::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
-      /* Flow Animation */
+      /* Flow Animation (Standard) */
       @keyframes flow {
-        from {
-          stroke-dashoffset: 20;
-        }
-        to {
-          stroke-dashoffset: 0;
-        }
+        to { stroke-dashoffset: -20; }
       }
       .animate-flow {
         stroke-dasharray: 10;
         animation: flow 1s linear infinite;
+      }
+
+      /* Reverse Flow */
+      @keyframes flow-reverse {
+        to { stroke-dashoffset: 20; }
+      }
+      .animate-reverse {
+        stroke-dasharray: 10;
+        animation: flow-reverse 1s linear infinite;
+      }
+
+      /* Traffic (Blocky movement) */
+      @keyframes traffic {
+        to { stroke-dashoffset: -40; }
+      }
+      .animate-traffic {
+        stroke-dasharray: 20 20;
+        stroke-linecap: square;
+        animation: traffic 1.5s linear infinite;
+      }
+
+      /* Signal (Fast small packets) */
+      @keyframes signal {
+        to { stroke-dashoffset: -50; }
+      }
+      .animate-signal {
+        stroke-dasharray: 5 45;
+        stroke-linecap: round;
+        animation: signal 0.5s linear infinite;
+      }
+
+      /* Pulse (Opacity) */
+      @keyframes pulse-line {
+        0%, 100% { opacity: 0.3; stroke-width: 2; }
+        50% { opacity: 1; stroke-width: 3; }
+      }
+      .animate-pulse {
+        animation: pulse-line 2s ease-in-out infinite;
       }
     </style>
   <script type="importmap">
