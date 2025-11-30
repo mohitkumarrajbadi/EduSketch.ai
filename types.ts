@@ -42,7 +42,7 @@ export type DiagramNode = {
   data?: any; // For visualizers
 };
 
-export type EdgeAnimation = 'none' | 'flow' | 'traffic' | 'pulse' | 'signal' | 'reverse';
+export type EdgeAnimation = 'none' | 'flow' | 'traffic' | 'pulse' | 'signal' | 'reverse' | 'ants' | 'neon';
 export type EdgeStyle = 'solid' | 'dashed' | 'dotted';
 
 export type DiagramEdge = {
@@ -82,4 +82,4 @@ export type SyncMessage =
   | { type: 'UPDATE_NODES'; payload: DiagramNode[] }
   | { type: 'UPDATE_EDGES'; payload: DiagramEdge[] };
 
-export type VisualizerType = 'sorting' | 'bst' | 'graph';
+export type VisualizerType = 'sorting' | 'bst' | 'graph' | 'stack' | 'linkedlist';

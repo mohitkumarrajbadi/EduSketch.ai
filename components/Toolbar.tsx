@@ -5,16 +5,15 @@ import {
   Square, 
   Circle,
   Diamond,
-  Database,
-  Cloud,
-  User,
   MousePointer2, 
   Hand,
   Sparkles, 
   Network, // Connection tool
   Share2,
   Settings,
-  Plus
+  Plus,
+  Binary,
+  Download
 } from 'lucide-react';
 import { ToolType } from '../types';
 
@@ -25,9 +24,20 @@ interface ToolbarProps {
   onSyncOpen: () => void;
   onSettingsOpen: () => void;
   onShapeLibraryOpen: () => void;
+  onVisualizerLibraryOpen: () => void;
+  onExportOpen: () => void;
 }
 
-const Toolbar: React.FC<ToolbarProps> = ({ currentTool, setTool, onAIModalOpen, onSyncOpen, onSettingsOpen, onShapeLibraryOpen }) => {
+const Toolbar: React.FC<ToolbarProps> = ({ 
+  currentTool, 
+  setTool, 
+  onAIModalOpen, 
+  onSyncOpen, 
+  onSettingsOpen, 
+  onShapeLibraryOpen,
+  onVisualizerLibraryOpen,
+  onExportOpen
+}) => {
   const tools = [
     { type: ToolType.SELECT, icon: <MousePointer2 size={20} />, label: 'Select (V)' },
     { type: ToolType.PAN, icon: <Hand size={20} />, label: 'Pan (Space)' },
@@ -40,9 +50,6 @@ const Toolbar: React.FC<ToolbarProps> = ({ currentTool, setTool, onAIModalOpen, 
     { type: ToolType.RECTANGLE, icon: <Square size={20} />, label: 'Rectangle' },
     { type: ToolType.CIRCLE, icon: <Circle size={20} />, label: 'Circle' },
     { type: ToolType.DIAMOND, icon: <Diamond size={20} />, label: 'Decision' },
-    { type: ToolType.CYLINDER, icon: <Database size={20} />, label: 'Database' },
-    { type: ToolType.CLOUD, icon: <Cloud size={20} />, label: 'Cloud' },
-    { type: ToolType.ACTOR, icon: <User size={20} />, label: 'Actor' },
   ];
 
   return (
@@ -99,6 +106,14 @@ const Toolbar: React.FC<ToolbarProps> = ({ currentTool, setTool, onAIModalOpen, 
       {/* Actions */}
       <div className="flex gap-1">
         <button
+          onClick={onVisualizerLibraryOpen}
+          className="p-3 rounded-xl text-amber-400 hover:text-white hover:bg-amber-900/50 transition-all"
+          title="Algorithm Visualizers"
+        >
+          <Binary size={20} />
+        </button>
+        
+        <button
           onClick={onAIModalOpen}
           className="p-3 rounded-xl text-purple-400 hover:text-white hover:bg-purple-900/50 transition-all"
           title="AI Assistant"
@@ -112,6 +127,14 @@ const Toolbar: React.FC<ToolbarProps> = ({ currentTool, setTool, onAIModalOpen, 
           title="Connect iPad"
         >
           <Share2 size={20} />
+        </button>
+        
+        <button
+          onClick={onExportOpen}
+          className="p-3 rounded-xl text-orange-400 hover:text-white hover:bg-orange-900/50 transition-all"
+          title="Export Diagram"
+        >
+          <Download size={20} />
         </button>
 
         <button

@@ -8,7 +8,9 @@ import {
   AppTheme,
   SyncMessage,
   NodeType,
-  EdgeAnimation
+  EdgeAnimation,
+  EdgeStyle,
+  VisualizerType
 } from './types';
 import Toolbar from './components/Toolbar';
 import AIPanel from './components/Sidebar/AIPanel';
@@ -16,14 +18,20 @@ import SyncModal from './components/SyncModal';
 import VisualizerContainer from './components/Visualizer/VisualizerContainer';
 import SettingsPanel, { themes } from './components/SettingsPanel';
 import ShapeLibrary from './components/ShapeLibrary';
+import VisualizerLibrary from './components/VisualizerLibrary';
 import { 
   Database, Cloud, User, Trash2, Scaling, Server, Layers, Box, Shuffle, 
   Shield, Smartphone, Monitor, HardDrive, Network as NetworkIcon, Container,
-  Zap, ArrowRight, ZapOff, Activity, MoveRight, Radio, GripHorizontal
+  Zap, ArrowRight, ZapOff, Activity, MoveRight, Radio, GripHorizontal,
+  Wifi, ActivitySquare, Sparkles, Download, FileImage, File
 } from 'lucide-react';
 
-// Declare PeerJS global
+// Declare PeerJS and Export libs global
 declare const Peer: any;
+declare const html2canvas: any;
+declare const jspdf: any;
+
+const SYSTEM_NODES = ['redis', 'kafka', 'queue', 'server', 'loadbalancer', 'k8s', 'docker', 'storage', 'firewall', 'mobile', 'browser', 'api', 'cylinder', 'cloud', 'actor'];
 
 function App() {
   // --- STATE ---
@@ -41,6 +49,9 @@ function App() {
   const [isSyncOpen, setIsSyncOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isShapeLibOpen, setIsShapeLibOpen] = useState(false);
+  const [isVisualizerLibOpen, setIsVisualizerLibOpen] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false); // Used to hide UI during capture
   
   // Interaction State
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
@@ -173,6 +184,120 @@ function App() {
     return { x: clientX, y: clientY };
   };
 
+  /**
+   * Calculates the intersection point between a line (from node center to target)
+   * and the node's boundary.
+   */
+  const getIntersection = (node: DiagramNode, target: Point): Point => {
+    const cx = node.x + node.width / 2;
+    const cy = node.y + node.height / 2;
+    const w = node.width / 2;
+    const h = node.height / 2;
+
+    const dx = target.x - cx;
+    const dy = target.y - cy;
+
+    // If target is practically center, return center
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return { x: cx, y: cy };
+
+    if (node.type === 'circle' || node.type === 'actor') {
+       // Ellipse intersection
+       const angle = Math.atan2(dy, dx);
+       return {
+         x: cx + w * Math.cos(angle),
+         y: cy + h * Math.sin(angle)
+       };
+    } 
+    else if (node.type === 'diamond') {
+       // Diamond: |x|/w + |y|/h = 1
+       // Slope m = dy/dx
+       // Intersection x: |x| * (1/w + |m|/h) = 1
+       const m = Math.abs(dy / dx);
+       const ix = 1 / (1/w + m/h);
+       const xSign = dx > 0 ? 1 : -1;
+       const ySign = dy > 0 ? 1 : -1;
+       
+       // Handle vertical line case separately if needed, but Math.abs handles infinity nicely in JS usually
+       // If dx is 0, m is Infinity, ix becomes 0.
+       if (dx === 0) return { x: cx, y: cy + (dy > 0 ? h : -h) };
+
+       return {
+         x: cx + ix * xSign,
+         y: cy + ix * m * ySign
+       };
+    } 
+    else {
+       // Rectangle (default)
+       // Check if line hits vertical or horizontal sides
+       // Slope of line
+       const m = dy / dx;
+       // Slope of rectangle diagonal
+       const mRect = h / w;
+       
+       if (Math.abs(m) <= mRect) {
+         // Hits vertical side (Left or Right)
+         if (dx > 0) return { x: cx + w, y: cy + w * m };
+         else return { x: cx - w, y: cy - w * m };
+       } else {
+         // Hits horizontal side (Top or Bottom)
+         if (dy > 0) return { x: cx + h / m, y: cy + h };
+         else return { x: cx - h / m, y: cy - h };
+       }
+    }
+  };
+
+  // --- EXPORT FUNCTION ---
+  const handleExport = async (format: 'png' | 'jpeg' | 'pdf' | 'gif') => {
+    setIsExportMenuOpen(false);
+    setIsExporting(true);
+    
+    // Wait for state to propagate and hide UI
+    await new Promise(r => setTimeout(r, 200));
+
+    try {
+      const element = containerRef.current;
+      if (!element) throw new Error("Canvas container not found");
+
+      // Capture high resolution
+      const canvas = await html2canvas(element, {
+        useCORS: true,
+        backgroundColor: theme.background,
+        scale: 2, // Reting quality
+        ignoreElements: (el: Element) => {
+          // Double check to ignore overlay UI elements
+          return el.classList.contains('no-export');
+        },
+        logging: false
+      });
+
+      if (format === 'pdf') {
+        const jsPDF = (window as any).jspdf?.jsPDF;
+        if (!jsPDF) {
+          alert("PDF library not loaded. Please try again or refresh.");
+          return;
+        }
+        const pdf = new jsPDF({
+          orientation: canvas.width > canvas.height ? 'l' : 'p',
+          unit: 'px',
+          format: [canvas.width / 2, canvas.height / 2] // Adjust for scale 2
+        });
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width / 2, canvas.height / 2);
+        pdf.save(`edusketch-export-${Date.now()}.pdf`);
+      } else {
+        const mimeType = format === 'jpeg' ? 'image/jpeg' : format === 'gif' ? 'image/gif' : 'image/png';
+        const link = document.createElement('a');
+        link.download = `edusketch-export-${Date.now()}.${format}`;
+        link.href = canvas.toDataURL(mimeType);
+        link.click();
+      }
+    } catch (err) {
+      console.error("Export failed", err);
+      alert("Failed to export. See console for details.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   // --- EVENT HANDLERS ---
   const handleWheel = (e: WheelEvent) => {
     e.preventDefault();
@@ -204,6 +329,9 @@ function App() {
     const screen = getScreenPoint(e);
     const world = toWorld(screen.x, screen.y);
     const target = e.target as HTMLElement;
+
+    // Close export menu if clicking outside
+    if (isExportMenuOpen) setIsExportMenuOpen(false);
 
     if (target.id === 'canvas-container' || target.tagName === 'CANVAS' || target.tagName === 'SVG') {
       setSelectedNodeId(null);
@@ -287,8 +415,7 @@ function App() {
       });
       if (toDelete.length > 0) {
         const remaining = strokes.filter(s => !toDelete.includes(s.id));
-        setStrokes(remaining); // Sync handled in mouse up usually, or here if immediate
-        // For smoother eraser, we can wait for mouse up to sync or sync often.
+        setStrokes(remaining); 
       }
     }
     else if (currentStroke) {
@@ -328,7 +455,7 @@ function App() {
       width: 120,
       height: 80,
       label,
-      color: color === '#1e293b' ? theme.nodeColor : color, 
+      color: color, 
       data: {}
     };
     // Special sizing
@@ -337,45 +464,85 @@ function App() {
     setTool(ToolType.SELECT);
   };
 
+  const handleInsertVisualizer = (type: VisualizerType, label: string) => {
+    const centerWorld = toWorld(window.innerWidth/2, window.innerHeight/2);
+    const widgetNode: DiagramNode = {
+       id: `widget-${Date.now()}`,
+       type: 'visualizer',
+       x: centerWorld.x - 160,
+       y: centerWorld.y - 120,
+       width: 320,
+       height: 240,
+       label: label,
+       color: 'transparent',
+       data: { type: type, array: [50, 20, 90, 10, 30, 70, 40, 80] }
+     };
+     updateNodes([...nodes, widgetNode]);
+     setTool(ToolType.SELECT);
+  };
+
   const handleEdgeClick = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     setSelectedEdgeId(id);
     setSelectedNodeId(null);
   };
 
-  const changeEdgeAnimation = (anim: EdgeAnimation) => {
-    if (selectedEdgeId) {
-       const newEdges = edges.map(edge => edge.id === selectedEdgeId ? { ...edge, animation: anim } : edge);
-       updateEdges(newEdges);
-    }
-  };
+  const applyEdgePreset = (preset: 'static' | 'dashed' | 'stream' | 'packets' | 'signal' | 'pulse' | 'ants' | 'neon') => {
+    if (!selectedEdgeId) return;
 
-  const changeEdgeStyle = (style: 'solid' | 'dashed' | 'dotted') => {
-    if (selectedEdgeId) {
-       const newEdges = edges.map(edge => edge.id === selectedEdgeId ? { ...edge, style: style } : edge);
-       updateEdges(newEdges);
-    }
+    let anim: EdgeAnimation = 'none';
+    let style: EdgeStyle = 'solid';
+
+    if (preset === 'static') { anim = 'none'; style = 'solid'; }
+    if (preset === 'dashed') { anim = 'none'; style = 'dashed'; }
+    if (preset === 'stream') { anim = 'flow'; style = 'solid'; }
+    if (preset === 'packets') { anim = 'traffic'; style = 'dashed'; }
+    if (preset === 'signal') { anim = 'signal'; style = 'dotted'; }
+    if (preset === 'pulse') { anim = 'pulse'; style = 'solid'; }
+    if (preset === 'ants') { anim = 'ants'; style = 'dashed'; }
+    if (preset === 'neon') { anim = 'neon'; style = 'solid'; }
+
+    const newEdges = edges.map(edge => 
+      edge.id === selectedEdgeId ? { ...edge, animation: anim, style: style } : edge
+    );
+    updateEdges(newEdges);
   };
 
   // --- RENDERING ICONS ---
   const renderNodeIcon = (node: DiagramNode) => {
     const size = 32;
-    const style = { color: node.color === 'transparent' ? theme.textColor : '#fff', opacity: 0.9 };
+    // Determine icon color: 
+    // If system node, use the specific node color (e.g. Red for Redis)
+    // If generic node (Rect), use white/contrast against the filled background
+    const isSystem = SYSTEM_NODES.includes(node.type);
+    let iconColor = theme.textColor;
+    
+    if (isSystem) {
+       // For system nodes, background is neutral, so icon takes the color
+       if (node.color && node.color !== theme.nodeColor && node.color !== 'transparent') {
+         iconColor = node.color;
+       }
+    } else {
+       // For shapes with filled background, icon should be white/contrast
+       iconColor = '#fff';
+    }
+
+    const style = { color: iconColor, opacity: 0.9 };
     
     switch (node.type) {
-      case 'redis': return <Database size={size} style={{ color: '#ef4444' }} />;
-      case 'kafka': return <Layers size={size} style={{ color: '#14b8a6' }} />;
-      case 'server': return <Server size={size} style={{ color: '#64748b' }} />;
-      case 'loadbalancer': return <Shuffle size={size} style={{ color: '#8b5cf6' }} />;
-      case 'storage': return <HardDrive size={size} style={{ color: '#eab308' }} />;
-      case 'cloud': return <Cloud size={size} style={{ color: '#94a3b8' }} />;
-      case 'k8s': return <NetworkIcon size={size} style={{ color: '#3b82f6' }} />;
-      case 'docker': return <Container size={size} style={{ color: '#0ea5e9' }} />;
-      case 'firewall': return <Shield size={size} style={{ color: '#f43f5e' }} />;
-      case 'mobile': return <Smartphone size={size} style={{ color: '#a855f7' }} />;
-      case 'browser': return <Monitor size={size} style={{ color: '#10b981' }} />;
-      case 'api': return <Zap size={size} style={{ color: '#eab308' }} />;
-      case 'queue': return <Box size={size} style={{ color: '#f97316' }} />;
+      case 'redis': return <Database size={size} style={style} />;
+      case 'kafka': return <Layers size={size} style={style} />;
+      case 'server': return <Server size={size} style={style} />;
+      case 'loadbalancer': return <Shuffle size={size} style={style} />;
+      case 'storage': return <HardDrive size={size} style={style} />;
+      case 'cloud': return <Cloud size={size} style={style} />;
+      case 'k8s': return <NetworkIcon size={size} style={style} />;
+      case 'docker': return <Container size={size} style={style} />;
+      case 'firewall': return <Shield size={size} style={style} />;
+      case 'mobile': return <Smartphone size={size} style={style} />;
+      case 'browser': return <Monitor size={size} style={style} />;
+      case 'api': return <Zap size={size} style={style} />;
+      case 'queue': return <Box size={size} style={style} />;
       case 'actor': return <User size={size} style={style} />;
       case 'cylinder': return <Database size={size} style={style} />;
       default: return null;
@@ -438,34 +605,38 @@ function App() {
             const to = nodes.find(n => n.id === edge.to);
             if (!from || !to) return null;
 
-            // Simple center-to-center for now
-            const x1 = from.x + from.width/2; 
-            const y1 = from.y + from.height/2;
-            const x2 = to.x + to.width/2; 
-            const y2 = to.y + to.height/2;
+            // Calculate exact intersection points
+            const startCenter = { x: from.x + from.width/2, y: from.y + from.height/2 };
+            const endCenter = { x: to.x + to.width/2, y: to.y + to.height/2 };
+            
+            const startPoint = getIntersection(from, endCenter);
+            const endPoint = getIntersection(to, startCenter);
 
             const animClass = 
               edge.animation === 'traffic' ? 'animate-traffic' :
               edge.animation === 'pulse' ? 'animate-pulse' :
               edge.animation === 'signal' ? 'animate-signal' :
               edge.animation === 'reverse' ? 'animate-reverse' :
+              edge.animation === 'ants' ? 'animate-ants' :
+              edge.animation === 'neon' ? 'animate-neon' :
               (edge.animation === 'flow') ? 'animate-flow' : '';
 
             const dashArray = 
-               edge.style === 'dotted' ? '2,4' : 
-               edge.style === 'dashed' ? '8,8' : 
+               (edge.animation === 'ants') ? '4,4' :
+               (edge.style === 'dotted' || edge.animation === 'signal') ? '2,4' : 
+               (edge.style === 'dashed' || edge.animation === 'traffic') ? '8,8' : 
                '0';
 
             return (
               <g key={edge.id} className="pointer-events-auto cursor-pointer group" onClick={(e) => handleEdgeClick(e, edge.id)}>
                  {/* Hit area */}
-                 <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth="15" />
+                 <line x1={startPoint.x} y1={startPoint.y} x2={endPoint.x} y2={endPoint.y} stroke="transparent" strokeWidth="20" />
                  {/* Visible line */}
                  <line 
-                   x1={x1} y1={y1} x2={x2} y2={y2} 
+                   x1={startPoint.x} y1={startPoint.y} x2={endPoint.x} y2={endPoint.y} 
                    stroke={selectedEdgeId === edge.id ? '#3b82f6' : theme.gridColor} 
                    strokeWidth={selectedEdgeId === edge.id ? 3 : 2}
-                   strokeDasharray={animClass ? undefined : dashArray}
+                   strokeDasharray={animClass && edge.animation !== 'ants' && edge.animation !== 'neon' ? undefined : dashArray}
                    className={animClass}
                    markerEnd="url(#arrowhead)"
                  />
@@ -474,8 +645,8 @@ function App() {
           })}
           {connectingNodeId && tempConnectionEnd && (
              <line 
-                x1={nodes.find(n => n.id === connectingNodeId)!.x + nodes.find(n => n.id === connectingNodeId)!.width/2}
-                y1={nodes.find(n => n.id === connectingNodeId)!.y + nodes.find(n => n.id === connectingNodeId)!.height/2}
+                x1={getIntersection(nodes.find(n => n.id === connectingNodeId)!, tempConnectionEnd).x}
+                y1={getIntersection(nodes.find(n => n.id === connectingNodeId)!, tempConnectionEnd).y}
                 x2={tempConnectionEnd.x} y2={tempConnectionEnd.y}
                 stroke={theme.gridColor} strokeWidth="2" strokeDasharray="5" opacity="0.5"
              />
@@ -515,7 +686,16 @@ function App() {
       {/* NODES LAYER */}
       <div className="absolute inset-0 z-30 pointer-events-none origin-top-left" 
            style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.k})` }}>
-        {nodes.map(node => (
+        {nodes.map(node => {
+          // Calculate background color: neutral for system nodes, filled for shapes
+          const isSystem = SYSTEM_NODES.includes(node.type);
+          const bgCol = node.type === 'visualizer' ? 'transparent' : 
+                         (isSystem ? theme.nodeColor : 
+                         (node.color !== 'transparent' ? node.color : undefined));
+          const borderCol = selectedNodeId === node.id ? '#3b82f6' : 
+                            (isSystem && node.color && node.color !== theme.nodeColor ? node.color : theme.gridColor + '80');
+
+          return (
           <div
             key={node.id}
             onMouseDown={(e) => { e.stopPropagation(); setSelectedNodeId(node.id); setSelectedEdgeId(null); if(tool === ToolType.CONNECT) { setConnectingNodeId(node.id); setTempConnectionEnd(toWorld(e.clientX, e.clientY)); } else if (tool === ToolType.SELECT) { setDraggedNodeId(node.id); setDragOffset({ x: toWorld(e.clientX, e.clientY).x - node.x, y: toWorld(e.clientX, e.clientY).y - node.y }); } }}
@@ -534,8 +714,8 @@ function App() {
             `}
             style={{
               left: node.x, top: node.y, width: node.width, height: node.height,
-              backgroundColor: node.type === 'visualizer' ? 'transparent' : (node.color !== 'transparent' ? node.color : undefined),
-              borderColor: selectedNodeId === node.id ? '#3b82f6' : (theme.gridColor + '80')
+              backgroundColor: bgCol,
+              borderColor: borderCol
             }}
           >
             {node.type === 'visualizer' ? (
@@ -575,96 +755,136 @@ function App() {
                </>
             )}
           </div>
-        ))}
+        )})}
       </div>
 
-      {/* EDGE CONTROLS POPUP (When Edge Selected) */}
-      {selectedEdgeId && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-panel border border-slate-700 p-2 rounded-xl shadow-xl flex gap-2 z-50 animate-fade-in pointer-events-auto">
-           <div className="flex gap-1 border-r border-slate-600 pr-2">
-             <button onClick={() => changeEdgeStyle('solid')} className="p-1 hover:bg-slate-700 rounded text-slate-300" title="Solid"><MoveRight size={16} /></button>
-             <button onClick={() => changeEdgeStyle('dashed')} className="p-1 hover:bg-slate-700 rounded text-slate-300" title="Dashed"><GripHorizontal size={16} /></button>
-             <button onClick={() => changeEdgeStyle('dotted')} className="p-1 hover:bg-slate-700 rounded text-slate-300" title="Dotted"><Radio size={16} /></button>
+      {/* EDGE CONTROLS POPUP (Labeled Presets) */}
+      {selectedEdgeId && !isExporting && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-panel border border-slate-700 p-3 rounded-xl shadow-xl flex flex-col gap-2 z-50 animate-fade-in pointer-events-auto min-w-[220px] no-export">
+           <div className="text-xs text-slate-400 font-bold uppercase tracking-wide mb-1">Connection Type</div>
+           <div className="grid grid-cols-2 gap-2">
+             <button onClick={() => applyEdgePreset('static')} className="px-3 py-2 hover:bg-slate-700 rounded text-slate-300 text-xs flex items-center gap-2 border border-slate-700">
+                <MoveRight size={14} /> Simple
+             </button>
+             <button onClick={() => applyEdgePreset('dashed')} className="px-3 py-2 hover:bg-slate-700 rounded text-slate-300 text-xs flex items-center gap-2 border border-slate-700">
+                <GripHorizontal size={14} /> Dashed
+             </button>
+             <button onClick={() => applyEdgePreset('stream')} className="px-3 py-2 hover:bg-slate-700 rounded text-slate-300 text-xs flex items-center gap-2 border border-slate-700">
+                <ArrowRight size={14} /> Data Flow
+             </button>
+             <button onClick={() => applyEdgePreset('packets')} className="px-3 py-2 hover:bg-slate-700 rounded text-slate-300 text-xs flex items-center gap-2 border border-slate-700">
+                <Container size={14} /> Packets
+             </button>
+             <button onClick={() => applyEdgePreset('signal')} className="px-3 py-2 hover:bg-slate-700 rounded text-slate-300 text-xs flex items-center gap-2 border border-slate-700">
+                <Wifi size={14} /> Signal
+             </button>
+             <button onClick={() => applyEdgePreset('pulse')} className="px-3 py-2 hover:bg-slate-700 rounded text-slate-300 text-xs flex items-center gap-2 border border-slate-700">
+                <ActivitySquare size={14} /> Pulse
+             </button>
+             <button onClick={() => applyEdgePreset('ants')} className="px-3 py-2 hover:bg-slate-700 rounded text-slate-300 text-xs flex items-center gap-2 border border-slate-700">
+                <MoveRight size={14} className="stroke-dashed" /> Ants
+             </button>
+             <button onClick={() => applyEdgePreset('neon')} className="px-3 py-2 hover:bg-slate-700 rounded text-slate-300 text-xs flex items-center gap-2 border border-slate-700">
+                <Sparkles size={14} /> Neon
+             </button>
            </div>
-           <div className="flex gap-1">
-             <button onClick={() => changeEdgeAnimation('none')} className="p-1 hover:bg-slate-700 rounded text-slate-300" title="Static"><ZapOff size={16} /></button>
-             <button onClick={() => changeEdgeAnimation('flow')} className="p-1 hover:bg-slate-700 rounded text-slate-300" title="Flow"><ArrowRight size={16} /></button>
-             <button onClick={() => changeEdgeAnimation('traffic')} className="p-1 hover:bg-slate-700 rounded text-slate-300" title="Traffic"><Container size={16} /></button>
-             <button onClick={() => changeEdgeAnimation('pulse')} className="p-1 hover:bg-slate-700 rounded text-slate-300" title="Pulse"><Activity size={16} /></button>
-             <button onClick={() => changeEdgeAnimation('signal')} className="p-1 hover:bg-slate-700 rounded text-slate-300" title="Signal"><Zap size={16} /></button>
-           </div>
-           <button onClick={() => { updateEdges(edges.filter(e => e.id !== selectedEdgeId)); setSelectedEdgeId(null); }} className="ml-2 text-red-400 hover:bg-red-900/30 p-1 rounded"><Trash2 size={16} /></button>
+           
+           <div className="w-full h-px bg-slate-700 my-1"></div>
+           
+           <button 
+             onClick={() => { updateEdges(edges.filter(e => e.id !== selectedEdgeId)); setSelectedEdgeId(null); }} 
+             className="w-full py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded text-xs font-semibold flex items-center justify-center gap-2"
+           >
+             <Trash2 size={14} /> Delete Connection
+           </button>
+        </div>
+      )}
+
+      {/* EXPORT MENU */}
+      {isExportMenuOpen && (
+        <div className="absolute bottom-24 left-1/2 ml-20 -translate-x-1/2 bg-panel border border-slate-700 p-2 rounded-xl shadow-xl z-50 flex flex-col gap-1 min-w-[150px] animate-fade-in no-export">
+           <div className="text-[10px] text-slate-500 font-bold uppercase px-2 py-1">Export As</div>
+           <button onClick={() => handleExport('png')} className="px-3 py-2 hover:bg-slate-700 rounded text-slate-200 text-xs flex items-center gap-2 text-left">
+              <FileImage size={14} className="text-blue-400" /> PNG Image
+           </button>
+           <button onClick={() => handleExport('jpeg')} className="px-3 py-2 hover:bg-slate-700 rounded text-slate-200 text-xs flex items-center gap-2 text-left">
+              <FileImage size={14} className="text-yellow-400" /> JPEG Image
+           </button>
+           <button onClick={() => handleExport('pdf')} className="px-3 py-2 hover:bg-slate-700 rounded text-slate-200 text-xs flex items-center gap-2 text-left">
+              <File size={14} className="text-red-400" /> PDF Document
+           </button>
+           <button onClick={() => handleExport('gif')} className="px-3 py-2 hover:bg-slate-700 rounded text-slate-200 text-xs flex items-center gap-2 text-left">
+              <FileImage size={14} className="text-purple-400" /> GIF Image
+           </button>
         </div>
       )}
 
       {/* UI Overlay */}
-      <div className="absolute top-4 left-4 z-50 pointer-events-none">
-        <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 font-mono tracking-tight">
-          EduSketch<span className="text-slate-500 text-sm font-normal">.ai</span>
-        </h1>
-        <div className="flex gap-2 mt-1">
-          <div className="px-2 py-0.5 rounded bg-slate-800/50 text-[10px] text-slate-400 border border-slate-700">
-             {Math.round(transform.k * 100)}%
+      {!isExporting && (
+        <div className="absolute top-4 left-4 z-50 pointer-events-none no-export">
+          <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 font-mono tracking-tight">
+            EduSketch<span className="text-slate-500 text-sm font-normal">.ai</span>
+          </h1>
+          <div className="flex gap-2 mt-1">
+            <div className="px-2 py-0.5 rounded bg-slate-800/50 text-[10px] text-slate-400 border border-slate-700">
+               {Math.round(transform.k * 100)}%
+            </div>
           </div>
         </div>
+      )}
+
+      {!isExporting && (
+        <Toolbar 
+          currentTool={tool} 
+          setTool={setTool} 
+          onAIModalOpen={() => setIsAIModalOpen(true)}
+          onSyncOpen={() => setIsSyncOpen(true)}
+          onSettingsOpen={() => setIsSettingsOpen(true)}
+          onShapeLibraryOpen={() => setIsShapeLibOpen(true)}
+          onVisualizerLibraryOpen={() => setIsVisualizerLibOpen(true)}
+          onExportOpen={() => setIsExportMenuOpen(!isExportMenuOpen)}
+        />
+      )}
+
+      <div className={isExporting ? 'hidden' : ''}>
+        <AIPanel 
+          isOpen={isAIModalOpen} 
+          onClose={() => setIsAIModalOpen(false)} 
+          onAddDiagram={(n, e) => {
+              const centerWorld = toWorld(window.innerWidth/2, window.innerHeight/2);
+              const offsetN = n.map(node => ({ ...node, x: node.x + centerWorld.x - 300, y: node.y + centerWorld.y - 200, color: theme.nodeColor }));
+              updateNodes([...nodes, ...offsetN]);
+              updateEdges([...edges, ...e.map(ed => ({...ed, animation: 'flow' as EdgeAnimation}))]);
+          }}
+        />
+        
+        <SyncModal 
+          isOpen={isSyncOpen}
+          onClose={() => setIsSyncOpen(false)}
+          peerId={peerId}
+          onJoinSession={connectToPeer}
+        />
+
+        <SettingsPanel
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          currentTheme={theme}
+          setTheme={setTheme}
+        />
+
+        <ShapeLibrary
+          isOpen={isShapeLibOpen}
+          onClose={() => setIsShapeLibOpen(false)}
+          onSelectShape={handleInsertShape}
+          theme={theme}
+        />
+
+        <VisualizerLibrary
+          isOpen={isVisualizerLibOpen}
+          onClose={() => setIsVisualizerLibOpen(false)}
+          onSelectVisualizer={handleInsertVisualizer}
+        />
       </div>
-
-      <Toolbar 
-        currentTool={tool} 
-        setTool={setTool} 
-        onAIModalOpen={() => setIsAIModalOpen(true)}
-        onSyncOpen={() => setIsSyncOpen(true)}
-        onSettingsOpen={() => setIsSettingsOpen(true)}
-        onShapeLibraryOpen={() => setIsShapeLibOpen(true)}
-      />
-
-      <AIPanel 
-        isOpen={isAIModalOpen} 
-        onClose={() => setIsAIModalOpen(false)} 
-        onAddDiagram={(n, e) => {
-            const centerWorld = toWorld(window.innerWidth/2, window.innerHeight/2);
-            const offsetN = n.map(node => ({ ...node, x: node.x + centerWorld.x - 300, y: node.y + centerWorld.y - 200, color: theme.nodeColor }));
-            updateNodes([...nodes, ...offsetN]);
-            updateEdges([...edges, ...e.map(ed => ({...ed, animation: 'flow' as EdgeAnimation}))]);
-        }}
-        onAddWidget={(type) => {
-           const centerWorld = toWorld(window.innerWidth/2, window.innerHeight/2);
-           const widgetNode: DiagramNode = {
-             id: `widget-${Date.now()}`,
-             type: 'visualizer',
-             x: centerWorld.x - 160,
-             y: centerWorld.y - 120,
-             width: 320,
-             height: 240,
-             label: 'Visualizer',
-             color: 'transparent',
-             data: { type: 'sorting', array: [50, 20, 90, 10, 30, 70, 40, 80] }
-           };
-           updateNodes([...nodes, widgetNode]);
-           setTool(ToolType.SELECT);
-        }}
-      />
-      
-      <SyncModal 
-        isOpen={isSyncOpen}
-        onClose={() => setIsSyncOpen(false)}
-        peerId={peerId}
-        onJoinSession={connectToPeer}
-      />
-
-      <SettingsPanel
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        currentTheme={theme}
-        setTheme={setTheme}
-      />
-
-      <ShapeLibrary
-        isOpen={isShapeLibOpen}
-        onClose={() => setIsShapeLibOpen(false)}
-        onSelectShape={handleInsertShape}
-        theme={theme}
-      />
 
     </div>
   );

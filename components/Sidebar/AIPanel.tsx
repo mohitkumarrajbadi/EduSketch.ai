@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Send, Sparkles, PlusCircle, Activity } from 'lucide-react';
+import { X, Send, Sparkles } from 'lucide-react';
 import { generateTeachingContent, generateDiagramFromText } from '../../services/gemini';
 import { ChatMessage, DiagramNode, DiagramEdge } from '../../types';
 
@@ -7,10 +7,9 @@ interface AIPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onAddDiagram: (nodes: DiagramNode[], edges: DiagramEdge[]) => void;
-  onAddWidget: (type: 'sorting' | 'tree') => void;
 }
 
-const AIPanel: React.FC<AIPanelProps> = ({ isOpen, onClose, onAddDiagram, onAddWidget }) => {
+const AIPanel: React.FC<AIPanelProps> = ({ isOpen, onClose, onAddDiagram }) => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -58,22 +57,6 @@ const AIPanel: React.FC<AIPanelProps> = ({ isOpen, onClose, onAddDiagram, onAddW
         <button onClick={onClose} className="text-slate-400 hover:text-white">
           <X size={18} />
         </button>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="p-3 grid grid-cols-2 gap-2 border-b border-slate-700">
-         <button 
-           onClick={() => onAddWidget('sorting')}
-           className="flex items-center justify-center gap-2 p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-medium text-blue-300 border border-slate-700 transition-colors"
-         >
-           <Activity size={14} /> Add Sorter
-         </button>
-         <button 
-           onClick={() => onAddWidget('tree')} // Placeholder for now
-           className="flex items-center justify-center gap-2 p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-medium text-emerald-300 border border-slate-700 transition-colors"
-         >
-           <PlusCircle size={14} /> Add Tree
-         </button>
       </div>
 
       {/* Chat Area */}

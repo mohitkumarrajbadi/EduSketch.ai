@@ -10,6 +10,10 @@
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <!-- QR Code Generator -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Export Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
     <script>
       tailwind.config = {
         theme: {
@@ -80,6 +84,22 @@
       }
       .animate-pulse {
         animation: pulse-line 2s ease-in-out infinite;
+      }
+
+      /* Marching Ants */
+      @keyframes ants {
+        to { stroke-dashoffset: -20; }
+      }
+      .animate-ants {
+        stroke-dasharray: 4 4;
+        animation: ants 1s linear infinite;
+        opacity: 0.8;
+      }
+
+      /* Neon Glow */
+      .animate-neon {
+        stroke-width: 3;
+        filter: drop-shadow(0 0 3px currentColor);
       }
     </style>
   <script type="importmap">

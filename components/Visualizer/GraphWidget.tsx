@@ -4,6 +4,7 @@ import { Play } from 'lucide-react';
 const GraphWidget: React.FC = () => {
   const [visited, setVisited] = useState<Set<string>>(new Set());
   const [active, setActive] = useState<string | null>(null);
+  const [startNode, setStartNode] = useState('A');
 
   const nodes = [
     { id: 'A', x: 50, y: 80 },
@@ -20,8 +21,8 @@ const GraphWidget: React.FC = () => {
 
   const bfs = async () => {
     setVisited(new Set());
-    const queue = ['A'];
-    const seen = new Set(['A']);
+    const queue = [startNode];
+    const seen = new Set([startNode]);
     
     while (queue.length > 0) {
       const curr = queue.shift()!;
@@ -29,11 +30,14 @@ const GraphWidget: React.FC = () => {
       setVisited(prev => new Set(prev).add(curr));
       await new Promise(r => setTimeout(r, 700));
 
-      // Get neighbors (simple logic for demo)
+      // Get neighbors
       const neighbors = edges
         .filter(e => e.includes(curr))
         .map(e => e[0] === curr ? e[1] : e[0]);
       
+      // Sort for deterministic visual behavior
+      neighbors.sort();
+
       for (const n of neighbors) {
         if (!seen.has(n)) {
           seen.add(n);
@@ -51,25 +55,34 @@ const GraphWidget: React.FC = () => {
            {edges.map((e, i) => {
              const n1 = nodes.find(n => n.id === e[0])!;
              const n2 = nodes.find(n => n.id === e[1])!;
-             return <line key={i} x1={n1.x} y1={n1.y} x2={n2.x} y2={n2.y} stroke="#475569" strokeWidth="2" />
+             // Check if edge is traversed (both nodes visited)
+             const isTraversed = visited.has(e[0]) && visited.has(e[1]);
+             return <line key={i} x1={n1.x} y1={n1.y} x2={n2.x} y2={n2.y} 
+                    stroke={isTraversed ? "#8b5cf6" : "#475569"} 
+                    strokeWidth={isTraversed ? "3" : "2"} 
+                    className="transition-all duration-500"
+                    />
            })}
            {nodes.map(n => (
-             <g key={n.id}>
+             <g key={n.id} onClick={() => !active && setStartNode(n.id)} className="cursor-pointer">
                <circle 
                  cx={n.x} cy={n.y} r="14" 
-                 fill={active === n.id ? '#eab308' : visited.has(n.id) ? '#3b82f6' : '#1e293b'} 
-                 stroke="#475569" 
-                 strokeWidth="2"
+                 fill={active === n.id ? '#eab308' : visited.has(n.id) ? '#8b5cf6' : n.id === startNode ? '#db2777' : '#1e293b'} 
+                 stroke={n.id === startNode ? '#fff' : '#475569'} 
+                 strokeWidth={n.id === startNode ? "2" : "1"}
                  className="transition-colors duration-500"
                />
-               <text x={n.x} y={n.y} dy="4" textAnchor="middle" fontSize="12" fill="white">{n.id}</text>
+               <text x={n.x} y={n.y} dy="4" textAnchor="middle" fontSize="12" fill="white" fontWeight="bold">{n.id}</text>
              </g>
            ))}
         </svg>
       </div>
-      <button onClick={bfs} className="mt-2 flex items-center gap-1 px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs font-medium">
-        <Play size={12} /> BFS Search
-      </button>
+      <div className="flex items-center gap-2 mt-2 w-full px-2">
+        <div className="text-xs text-slate-400">Start: <span className="text-white font-bold">{startNode}</span></div>
+        <button onClick={bfs} disabled={!!active} className="flex-1 ml-auto flex items-center justify-center gap-1 px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs font-medium disabled:opacity-50">
+          <Play size={12} /> BFS
+        </button>
+      </div>
     </div>
   );
 };
